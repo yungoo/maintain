@@ -286,11 +286,6 @@ go()
 
 echo $#
 
-if [ $# -ne 6 ];then
-  echo "usage:$PROGRAM -e email -p pwd -d 'viwei.net pri gate'"
-  exit 6
-fi
-
 while test $# -gt 0; do
   case "$1" in
     -e|--email)

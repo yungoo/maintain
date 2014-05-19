@@ -1,0 +1,66 @@
+#! /bin/sh
+#
+# chkconfig: - 84 16
+# description:  PHP FastCGI Process Manager
+# processname: php-fpm
+# config: /etc/php-fpm.conf
+# config: /etc/sysconfig/php-fpm
+# pidfile: /var/run/php-fpm/php-fpm.pid
+
+# Source function library.
+. /etc/init.d/functions
+
+RETVAL=0
+prog="/usr/local/bin/dnspodsh"
+pidfile=${PIDFILE-/var/run/dnspod/dnspod.pid}
+lockfile=${LOCKFILE-/var/lock/subsys/dnspod}
+dnspod_email=""
+dnspod_pwd=""
+dnspod_record="domain subdomail"
+
+start() {
+	echo -n $"Starting $prog: "
+	if [ -s $pidfile} ]; then
+		RETVAL=1
+		echo -n "Already running!" && warning
+		echo
+	else
+		dir=$(dirname ${pidfile})
+		[ -d $dir ] || mkdir $dir
+		nohup ${prog} -e ${dnspod_email} -p ${dnspod_pwd} -d ${dnspod_record} >/dev/null 2>&1 &
+		RETVAL=$?
+		PID=$!
+    		[ $RETVAL -eq 0 ] && touch ${lockfile} && success || failure
+		echo
+		echo $PID > ${pidfile}
+	fi
+}
+
+stop() {
+	echo -n $"Stopping $prog: "
+	killproc -p ${pidfile} ${prog} 
+	RETVAL=$?
+	echo
+	if [ $RETVAL -eq 0 ] ; then
+        	rm -f ${lockfile} ${pidfile}
+    	fi
+}
+
+restart () {
+    stop
+    start
+}
+
+case "$1" in
+  start)
+        start
+        ;;
+  stop)
+        stop
+        ;;
+  restart)
+        restart
+        ;;
+esac
+exit $RETVAL
+
