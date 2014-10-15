@@ -27,7 +27,7 @@ apiUrl='https://dnsapi.cn/'
 ipUrl='http://members.3322.org/dyndns/getip'
 
 # 多长时间比较一次ip地址
-delay=300
+delay=20
 
 # logfile
 logDir='/var/log'
@@ -168,6 +168,7 @@ checkStatusCode()
     writeLog 'exit dnspodsh'
     exit 1
   fi
+  return 1
 }
 
 # 获取与当前ip不同的，要更新的记录的数组
@@ -179,7 +180,10 @@ getChangedRecords()
     writeLog 'DNSPOD tell me domain list is null,waiting...'
     return 1
   fi
-  checkStatusCode "$domainListInfo" 1
+  if ! checkStatusCode "$domainListInfo" 0; then
+    writeLog "get domainList return failed: $domainListInfo"
+    return 1
+  fi
 
   # 主域名的id
   local domainid
@@ -207,10 +211,14 @@ getChangedRecords()
   local numDomain=${#domainList[@]}
   local domainGroup
 
+  writeLog "start checking subDomains: $numDomain"
   for ((i=0;i<$numDomain;i++));do
     domainGroup=${domainList[$i]}
     j=0
+    writeLog "checking request domain $domainGroup..."
     for domain in ${domainGroup[@]};do
+      writeLog "checking $domain ..."
+
       # 列表的第一个项目，是主域名
       if ((j==0));then
         domainName=$domain
@@ -222,13 +230,14 @@ getChangedRecords()
           writeLog 'DNSPOD tell me record list null,waiting...'
           return 1
         fi
-        checkStatusCode "$recordList" 1
+        checkStatusCode "$recordList" 0
       else
         # 从dnspod获取要设置的子域名记录的信息
         recordInfo=$(echo $recordList|getJSONObjByARecord $domain)
         
         # 如果取不到记录，则不处理
         if [ -z "$recordInfo" ];then
+          writeLog "$domain 's record not found"
           continue
         fi
 
@@ -241,6 +250,7 @@ getChangedRecords()
           continue
         fi
 
+        writeLog "oldip is: $oldip"
 
         if [ "$newip" != "$oldip" ];then
           recordid=$(getDataByKey "$recordInfo" 'id')
@@ -261,6 +271,7 @@ getChangedRecords()
       fi
       j=$((j+1))
     done
+    writeLog "finish checking subDomains: $numDomain"
   done
 }
 
@@ -270,12 +281,16 @@ go()
   # 由于获取到的数据多了一些多余的字符，所以提取ip地址的部分
   # 从api中获取当前的外网ip
   newip=$(curl -k -s $ipUrl|grep -o $(getRegexp 'value'))
+  writeLog "response ip is: $newip"
+
   # 如果获取最新ip错误，就继续等待下一次取值
   if ! checkip "$newip";then
     writeLog 'can not get new ip,waiting...'
-    sleep $delay
-    continue
+    return
   fi
+
+  writeLog "try fetching changed records"
+
   # 获取需要修改的记录
   getChangedRecords
   if (( ${#changedRecords[@]} > 0 ));then
@@ -284,8 +299,7 @@ go()
   fi
 }
 
-echo $#
-
+# 获取参数
 while test $# -gt 0; do
   case "$1" in
     -e|--email)
